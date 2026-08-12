@@ -10,23 +10,16 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# =========================
-# SETTINGS
-# =========================
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+CHANNEL_USERNAME = "@DailyLootGiveaway"
+CHANNEL_LINK = "https://t.me/DailyLootGiveaway"
 
 PRIZE = "₹100"
 WINNERS_COUNT = 4
 
-# Giveaway data
 participants = set()
 giveaway_active = False
-
-
-# =========================
-# LOGGING
-# =========================
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -35,10 +28,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-
-# =========================
-# /start
-# =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -49,10 +38,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
-# /giveaway
-# =========================
-
 async def giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global participants, giveaway_active
 
@@ -62,44 +47,72 @@ async def giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton(
+                "📢 JOIN CHANNEL",
+                url=CHANNEL_LINK
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "🎁 JOIN GIVEAWAY",
                 callback_data="join"
             )
-        ]
+        ],
     ]
 
     await update.message.reply_text(
         "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
         f"💰 Prize: {PRIZE}\n"
         f"🏆 Winners: {WINNERS_COUNT}\n\n"
-        "👇 Giveaway join karne ke liye button dabao.\n\n"
+        "1️⃣ पहले channel join करो\n"
+        "2️⃣ फिर JOIN GIVEAWAY दबाओ\n\n"
         "👥 Participants: 0",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-# =========================
-# JOIN BUTTON
-# =========================
 
 async def join_giveaway(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
     query = update.callback_query
-
     user = query.from_user
 
     if not giveaway_active:
         await query.answer(
-            "❌ Giveaway active nahi hai.",
+            "❌ Giveaway active नहीं है.",
+            show_alert=True
+        )
+        return
+
+    try:
+        member = await context.bot.get_chat_member(
+            chat_id=CHANNEL_USERNAME,
+            user_id=user.id
+        )
+
+        if member.status in ["left", "kicked"]:
+            await query.answer(
+                "❌ पहले channel join करो!",
+                show_alert=True
+            )
+            return
+
+    except Exception as error:
+        logger.error(
+            "Membership check error: %s",
+            error
+        )
+
+        await query.answer(
+            "⚠️ Membership check नहीं हो पाया. "
+            "थोड़ी देर बाद फिर try करो.",
             show_alert=True
         )
         return
 
     if user.id in participants:
         await query.answer(
-            "ℹ️ Aap already giveaway me joined ho!",
+            "ℹ️ आप पहले से giveaway में joined हो.",
             show_alert=True
         )
         return
@@ -107,17 +120,23 @@ async def join_giveaway(
     participants.add(user.id)
 
     await query.answer(
-        "✅ Giveaway me successfully join ho gaye!",
+        "✅ Giveaway में successfully join हो गए!",
         show_alert=True
     )
 
     keyboard = [
         [
             InlineKeyboardButton(
+                "📢 JOIN CHANNEL",
+                url=CHANNEL_LINK
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "🎁 JOIN GIVEAWAY",
                 callback_data="join"
             )
-        ]
+        ],
     ]
 
     try:
@@ -125,20 +144,17 @@ async def join_giveaway(
             "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
             f"💰 Prize: {PRIZE}\n"
             f"🏆 Winners: {WINNERS_COUNT}\n\n"
-            "👇 Giveaway join karne ke liye button dabao.\n\n"
+            "✅ Entry confirmed!\n\n"
             f"👥 Participants: {len(participants)}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
     except Exception as error:
         logger.error(
             "Message update error: %s",
             error
         )
 
-
-# =========================
-# /end
-# =========================
 
 async def end_giveaway(
     update: Update,
@@ -148,16 +164,14 @@ async def end_giveaway(
 
     if not giveaway_active:
         await update.message.reply_text(
-            "❌ Koi active giveaway nahi hai."
+            "❌ कोई active giveaway नहीं है."
         )
         return
 
     if len(participants) < WINNERS_COUNT:
         await update.message.reply_text(
-            "❌ Giveaway end nahi ho sakta.\n\n"
-            f"👥 Participants: {len(participants)}\n"
-            f"🏆 Required: {WINNERS_COUNT}\n\n"
-            f"Kam se kam {WINNERS_COUNT} participants chahiye."
+            f"❌ अभी सिर्फ {len(participants)} participants हैं.\n"
+            f"कम से कम {WINNERS_COUNT} participants चाहिए."
         )
         return
 
@@ -169,7 +183,7 @@ async def end_giveaway(
     )
 
     message = (
-        "🎉🎉 DAILY LOOT GIVEAWAY WINNERS 🎉🎉\n\n"
+        "🎉 DAILY LOOT GIVEAWAY WINNERS 🎉\n\n"
         f"💰 Prize: {PRIZE}\n\n"
     )
 
@@ -179,12 +193,12 @@ async def end_giveaway(
             user = await context.bot.get_chat(user_id)
 
             if user.username:
-                winner_name = f"@{user.username}"
+                name = f"@{user.username}"
             else:
-                winner_name = user.first_name or "Winner"
+                name = user.first_name or "Winner"
 
             message += (
-                f"🏆 Winner {number}: {winner_name}\n"
+                f"🏆 Winner {number}: {name}\n"
             )
 
         except Exception:
@@ -193,16 +207,12 @@ async def end_giveaway(
             )
 
     message += (
-        "\n🎁 Congratulations to all winners! 🎁\n"
+        "\n🎁 Congratulations! 🎁\n"
         "\n❤️ Daily Loot Giveaway"
     )
 
     await update.message.reply_text(message)
 
-
-# =========================
-# ERROR HANDLER
-# =========================
 
 async def error_handler(
     update: object,
@@ -214,15 +224,11 @@ async def error_handler(
     )
 
 
-# =========================
-# MAIN
-# =========================
-
 def main():
 
     if not BOT_TOKEN:
         raise RuntimeError(
-            "BOT_TOKEN GitHub Secret me nahi mila."
+            "BOT_TOKEN GitHub Secret में नहीं मिला."
         )
 
     application = (
@@ -262,10 +268,6 @@ def main():
         drop_pending_updates=True
     )
 
-
-# =========================
-# START BOT
-# =========================
 
 if __name__ == "__main__":
     main()
