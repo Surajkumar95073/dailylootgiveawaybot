@@ -1,6 +1,5 @@
 import os
 import random
-import asyncio
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -12,8 +11,6 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-CHANNEL_USERNAME = "@Zvtdrs4tPEdlYTJl"
-
 PRIZE = "₹100"
 WINNERS_COUNT = 4
 
@@ -24,37 +21,44 @@ giveaway_active = False
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎁 Welcome to Daily Loot Giveaway!\n\n"
-        "Giveaway Prize: ₹100\n"
-        "Winners: 4\n\n"
-        "Admin giveaway start karega."
+        "💰 Prize: ₹100\n"
+        "🏆 Winners: 4\n\n"
+        "Use /giveaway to start a giveaway."
     )
 
 
 async def giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global participants, giveaway_active
 
-    participants = set()
+    participants.clear()
     giveaway_active = True
 
     keyboard = [
-        [InlineKeyboardButton(
-            "🎁 JOIN GIVEAWAY",
-            callback_data="join"
-        )]
+        [
+            InlineKeyboardButton(
+                "🎁 JOIN GIVEAWAY",
+                callback_data="join_giveaway"
+            )
+        ]
     ]
 
     await update.message.reply_text(
-        "🎁 DAILY LOOT GIVEAWAY\n\n"
-        f"💰 Prize: {PRIZE}\n"
-        f"🏆 Winners: {WINNERS_COUNT}\n\n"
-        "👇 Giveaway me participate karne ke liye button dabao.",
+        "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
+        "💰 Prize: ₹100\n"
+        "🏆 Winners: 4\n\n"
+        "👇 Participate karne ke liye JOIN GIVEAWAY dabao.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 async def join_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+
+    await query.answer(
+        "✅ Giveaway me successfully join ho gaye!"
+    )
+
+    user = query.from_user
 
     if not giveaway_active:
         await query.answer(
@@ -63,13 +67,35 @@ async def join_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    user = query.from_user
+    if user.id in participants:
+        await query.answer(
+            "ℹ️ Aap already giveaway me joined ho.",
+            show_alert=True
+        )
+        return
+
     participants.add(user.id)
 
-    await query.answer(
-        "✅ Aap giveaway me join ho gaye!",
-        show_alert=True
-    )
+    try:
+        await query.edit_message_text(
+            text=(
+                "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
+                "💰 Prize: ₹100\n"
+                "🏆 Winners: 4\n\n"
+                f"👥 Participants: {len(participants)}\n\n"
+                "👇 Join karne ke liye button dabao."
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🎁 JOIN GIVEAWAY",
+                        callback_data="join_giveaway"
+                    )
+                ]
+            ])
+        )
+    except Exception:
+        pass
 
 
 async def end_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -85,8 +111,9 @@ async def end_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(participants) < WINNERS_COUNT:
         await update.message.reply_text(
-            f"❌ Sirf {len(participants)} participants hain. "
-            f"{WINNERS_COUNT} winners select nahi ho sakte."
+            f"❌ Sirf {len(participants)} participants hain.\n"
+            f"{WINNERS_COUNT} winners ke liye kam se kam "
+            f"{WINNERS_COUNT} participants chahiye."
         )
         return
 
@@ -95,40 +122,37 @@ async def end_giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WINNERS_COUNT
     )
 
-    text = "🎉 DAILY LOOT GIVEAWAY WINNERS 🎉\n\n"
+    message = "🎉 DAILY LOOT GIVEAWAY WINNERS 🎉\n\n"
 
-    for number, user_id in enumerate(winners, 1):
+    for number, user_id in enumerate(winners, start=1):
         try:
             user = await context.bot.get_chat(user_id)
             name = user.first_name or "Winner"
-            text += f"🏆 Winner {number}: {name}\n"
+            message += f"🏆 Winner {number}: {name}\n"
         except Exception:
-            text += f"🏆 Winner {number}: User ID {user_id}\n"
+            message += f"🏆 Winner {number}: User ID {user_id}\n"
 
-    text += f"\n💰 Prize: {PRIZE}\n"
-    text += "🎁 Congratulations! 🎉"
+    message += "\n💰 Prize: ₹100"
+    message += "\n🎁 Congratulations! 🎉"
 
-    await update.message.reply_text(text)
+    await update.message.reply_text(message)
 
 
 def main():
     if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN missing!")
+        raise RuntimeError("BOT_TOKEN is not configured.")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("giveaway", giveaway))
     app.add_handler(CommandHandler("end", end_giveaway))
-    app.add_handler(CallbackQueryHandler(
-        join_giveaway,
-        pattern="^join$"
-    ))
 
-    print("🤖 Daily Loot Giveaway Bot Started!")
+    app.add_handler(
+        CallbackQueryHandler(
+            join_giveaway,
+            pattern="^join_giveaway$"
+        )
+    )
 
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+    print("
