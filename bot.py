@@ -155,4 +155,4 @@ def main():
         )
     )
 
-    print("
+    print("🤖 Daily Loot Giveaway Bot is running...")
