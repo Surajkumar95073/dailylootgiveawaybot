@@ -17,8 +17,11 @@ CHANNEL_LINK = "https://t.me/DailyLootGiveaway"
 
 PRIZE = "₹100"
 WINNERS_COUNT = 4
+REQUIRED_REFERRALS = 3
 
 participants = set()
+referrals = {}
+referred_by = {}
 giveaway_active = False
 
 logging.basicConfig(
@@ -29,19 +32,64 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def referral_link(bot_username, user_id):
+    return f"https://t.me/{bot_username}?start=ref_{user_id}"
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+
+    # Referral processing
+    if context.args:
+        argument = context.args[0]
+
+        if argument.startswith("ref_"):
+            try:
+                referrer_id = int(argument.replace("ref_", ""))
+
+                if (
+                    referrer_id != user_id
+                    and user_id not in referred_by
+                ):
+                    referred_by[user_id] = referrer_id
+
+                    if referrer_id not in referrals:
+                        referrals[referrer_id] = set()
+
+                    referrals[referrer_id].add(user_id)
+
+            except ValueError:
+                pass
+
+    me = await context.bot.get_me()
+
+    link = referral_link(
+        me.username,
+        user_id
+    )
+
+    count = len(referrals.get(user_id, set()))
+
     await update.message.reply_text(
-        "🎁 DAILY LOOT GIVEAWAY BOT 🎁\n\n"
+        "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
         f"💰 Prize: {PRIZE}\n"
         f"🏆 Winners: {WINNERS_COUNT}\n\n"
-        "Giveaway start karne ke liye /giveaway bhejo."
+        "📢 Channel join karo\n"
+        f"👥 {REQUIRED_REFERRALS} friends refer karo\n"
+        "🎁 Phir giveaway join karo.\n\n"
+        f"👥 Your referrals: {count}/{REQUIRED_REFERRALS}\n\n"
+        "🔗 Apna referral link:\n"
+        f"{link}"
     )
 
 
-async def giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global participants, giveaway_active
+async def giveaway(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    global giveaway_active
 
-    participants.clear()
     giveaway_active = True
 
     keyboard = [
@@ -63,9 +111,10 @@ async def giveaway(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
         f"💰 Prize: {PRIZE}\n"
         f"🏆 Winners: {WINNERS_COUNT}\n\n"
-        "1️⃣ पहले channel join करो\n"
-        "2️⃣ फिर JOIN GIVEAWAY दबाओ\n\n"
-        "👥 Participants: 0",
+        "📢 Step 1: Channel join karo\n"
+        f"👥 Step 2: {REQUIRED_REFERRALS} friends refer karo\n"
+        "🎁 Step 3: JOIN GIVEAWAY dabao\n\n"
+        "⚠️ Dono conditions complete hona zaroori hai.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -76,84 +125,79 @@ async def join_giveaway(
 ):
     query = update.callback_query
     user = query.from_user
+    user_id = user.id
 
     if not giveaway_active:
         await query.answer(
-            "❌ Giveaway active नहीं है.",
+            "❌ Giveaway active nahi hai.",
             show_alert=True
         )
         return
 
+    # Channel check
     try:
         member = await context.bot.get_chat_member(
-            chat_id=CHANNEL_USERNAME,
-            user_id=user.id
+            CHANNEL_USERNAME,
+            user_id
         )
 
-        if member.status in ["left", "kicked"]:
+        if member.status in ("left", "kicked"):
             await query.answer(
-                "❌ पहले channel join करो!",
+                "❌ Pehle channel join karo!",
                 show_alert=True
             )
             return
 
     except Exception as error:
         logger.error(
-            "Membership check error: %s",
+            "Channel check error: %s",
             error
         )
 
         await query.answer(
-            "⚠️ Membership check नहीं हो पाया. "
-            "थोड़ी देर बाद फिर try करो.",
+            "⚠️ Channel membership check nahi ho paya.",
             show_alert=True
         )
         return
 
-    if user.id in participants:
+    # Referral check
+    referral_count = len(
+        referrals.get(user_id, set())
+    )
+
+    if referral_count < REQUIRED_REFERRALS:
+        remaining = (
+            REQUIRED_REFERRALS - referral_count
+        )
+
         await query.answer(
-            "ℹ️ आप पहले से giveaway में joined हो.",
+            f"❌ {remaining} aur friend refer karo!",
             show_alert=True
         )
         return
 
-    participants.add(user.id)
+    # Already joined
+    if user_id in participants:
+        await query.answer(
+            "ℹ️ Aap already giveaway me joined ho.",
+            show_alert=True
+        )
+        return
+
+    participants.add(user_id)
 
     await query.answer(
-        "✅ Giveaway में successfully join हो गए!",
+        "✅ Giveaway me successfully join ho gaye!",
         show_alert=True
     )
 
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "📢 JOIN CHANNEL",
-                url=CHANNEL_LINK
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🎁 JOIN GIVEAWAY",
-                callback_data="join"
-            )
-        ],
-    ]
-
-    try:
-        await query.edit_message_text(
-            "🎁 DAILY LOOT GIVEAWAY 🎁\n\n"
-            f"💰 Prize: {PRIZE}\n"
-            f"🏆 Winners: {WINNERS_COUNT}\n\n"
-            "✅ Entry confirmed!\n\n"
-            f"👥 Participants: {len(participants)}",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-    except Exception as error:
-        logger.error(
-            "Message update error: %s",
-            error
-        )
+    await query.message.reply_text(
+        "🎉 ENTRY CONFIRMED! 🎉\n\n"
+        "✅ Channel joined\n"
+        f"✅ {REQUIRED_REFERRALS} friends referred\n"
+        "✅ Giveaway joined\n\n"
+        "🍀 Best of luck!"
+    )
 
 
 async def end_giveaway(
@@ -164,14 +208,15 @@ async def end_giveaway(
 
     if not giveaway_active:
         await update.message.reply_text(
-            "❌ कोई active giveaway नहीं है."
+            "❌ Koi active giveaway nahi hai."
         )
         return
 
     if len(participants) < WINNERS_COUNT:
         await update.message.reply_text(
-            f"❌ अभी सिर्फ {len(participants)} participants हैं.\n"
-            f"कम से कम {WINNERS_COUNT} participants चाहिए."
+            f"❌ Sirf {len(participants)} valid participants hain.\n"
+            f"{WINNERS_COUNT} winners ke liye "
+            f"{WINNERS_COUNT} participants chahiye."
         )
         return
 
@@ -187,8 +232,10 @@ async def end_giveaway(
         f"💰 Prize: {PRIZE}\n\n"
     )
 
-    for number, user_id in enumerate(winners, start=1):
-
+    for number, user_id in enumerate(
+        winners,
+        start=1
+    ):
         try:
             user = await context.bot.get_chat(user_id)
 
@@ -207,8 +254,7 @@ async def end_giveaway(
             )
 
     message += (
-        "\n🎁 Congratulations! 🎁\n"
-        "\n❤️ Daily Loot Giveaway"
+        "\n🎁 Congratulations! 🎁"
     )
 
     await update.message.reply_text(message)
@@ -228,7 +274,7 @@ def main():
 
     if not BOT_TOKEN:
         raise RuntimeError(
-            "BOT_TOKEN GitHub Secret में नहीं मिला."
+            "BOT_TOKEN GitHub Secret me nahi mila."
         )
 
     application = (
